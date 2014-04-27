@@ -1,4 +1,4 @@
-#include <SPI.h>
+//#include <SPI.h>
 #include "U8glib.h"
 #include <SoftwareSerial.h>
 #include <avr/sleep.h>
@@ -9,6 +9,8 @@
 byte index = 0;
 byte control = 2;
 byte mode = 3;
+byte ddrcValue = 0;
+byte portcValue = 0;
 unsigned long batteryTime = 0;
 unsigned long GPSStatusTime = 0;
 unsigned long last_data_received = 0; //is the GPS transmitting
@@ -64,12 +66,6 @@ void draw()
 {
   switch(mode)
   {
-    case 3:
-      u8g.setFont(u8g_font_helvR08);
-      u8g.setPrintPos(0,16);
-      u8g.print("Stopping");
-      break;
-      
     case 1:
       u8g.setFont(u8g_font_5x7);
       u8g.setPrintPos(0,6);
@@ -94,10 +90,15 @@ void draw()
       u8g.print(distance - ((distance/10000)*10000));
       break;
       
-  }
-  
-  
-  
+    case 3:
+      u8g.setFont(u8g_font_helvR08);
+      u8g.setPrintPos(0,16);
+      u8g.print("Stopping");
+      break;
+
+    case 4:  //this just clears the display before going to sleep
+      break;          
+  } 
 }
 
 void OLED_Update()
@@ -166,6 +167,7 @@ void check_for_buttonpress()
     }
     last_button_press = millis();
     mode++;
+    OLED_Update();
     buttonpress = false;
     attachInterrupt(0, button_press, FALLING);
     Serial.print("Mode = ");
@@ -180,6 +182,18 @@ void sleep()
   Serial.println("Sleeping");
   OLED_Update();
   delay(2000);
+  mode=4;
+  OLED_Update();  //clear the display
+  //current was sinking through the MOSI pin
+  //digitalWrite(OLED_MOSI, LOW);
+  //u8g.sleepOn();
+  ddrcValue = 0;
+  portcValue = 0;
+  //store current value of DDRC and PORTC
+  ddrcValue = DDRC;
+  portcValue = PORTC;
+  DDRC &= ~0b00011111; //clear all of the bits corresponding to SPI
+  PORTC &= ~0b00011111; 
   digitalWrite(A5, HIGH);  //turns off the GPS and Display
   sleep_enable();
   attachInterrupt(0, button_press, LOW);
@@ -192,8 +206,13 @@ void sleep()
   //code starts back up here after wake up
   Serial.println("I'm awake");
   sleep_disable();
+  //digitalWrite(OLED_MOSI, HIGH);
+  DDRC |= ddrcValue;  //set DDRC and PORTC back to its pre-sleep state
+  PORTC |= portcValue;
+  delay(50);  //I added this delay because I was having trouble with brown out resets
   digitalWrite(A5, LOW);  //turns on the GPS and Display
-  delay(50);
+  delay(500);  //I needed this delay because the GPS wasn't executing the next
+                // command without it
   mySerial.println("$PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0*35");
   last_latitude = 0;
   last_longitude = 0;
@@ -280,16 +299,19 @@ void check_for_updated_data()
 }
 
 void check_battery()
-{ //298 is the difference in value between 980 (4.2V full charge)
+{ //282 is the difference in value between 980 (4.2V full charge)
   //and 698 (3.0V empty charge).  We display the percent remaining.
   
   b = 0;
   for(int i = 0; i<10; i++)
   {
     b+=analogRead(A6);
+    //Serial.println(b);
+    
   }
   b = b/10;
-  b = (((b-698)*100)/272);
+  Serial.println(b);
+  b = (((b-698)*100)/282);
   Serial.println(b); 
 }
 
