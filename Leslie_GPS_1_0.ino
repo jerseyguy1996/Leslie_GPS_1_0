@@ -136,6 +136,7 @@ void loop()
     check_GPS_Status();
     OLED_Update();
     GPSStatusTime = millis() + 5000;
+    //mySerial.println("$PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0*35");
     
   }
   
@@ -211,9 +212,12 @@ void sleep()
   PORTC |= portcValue;
   delay(50);  //I added this delay because I was having trouble with brown out resets
   digitalWrite(A5, LOW);  //turns on the GPS and Display
-  delay(500);  //I needed this delay because the GPS wasn't executing the next
+  delay(50);  //I needed this delay because the GPS wasn't executing the next
                 // command without it
-  mySerial.println("$PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0*35");
+  //u8g.begin();
+  //Serial.println("sending command");
+  //mySerial.println("$PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0*35");
+  
   last_latitude = 0;
   last_longitude = 0;
   index = 0;
@@ -286,7 +290,7 @@ void check_for_updated_data()
 {
   if(checkforSentence()) 
   {
-    Serial.println(buffer);
+    //Serial.println(buffer);
     if(Process_message() && strcmp(messageID, "GPGGA") == 0)
     {
       //
@@ -328,6 +332,7 @@ boolean checkforSentence()
     if(sentenceBegins && c == '\r') //we have a full sentence
     {
       sentenceBegins = false;
+      Serial.println(buffer);
       return true;
     }
     
@@ -336,6 +341,33 @@ boolean checkforSentence()
       buffer[index] = c;
       index++;
       buffer[index] = '\0';
+      /*
+      we need something to segregate out the RMC and GGA sentences and ignore
+      everything else.  Originally I was sending a command to the GPS to
+      only send the string that I was interested in, but for some reason the GPS
+      is not accepting my commands anymore.  It happened pretty suddenly so f'
+      it.  I will just ignore everything that I don't want to see.
+      */
+      if(index==5)
+      {
+        if(data_index==true)
+        {
+          if(!(strcmp(buffer, "GPGGA") == 0))
+          {
+            sentenceBegins = false;
+            //Serial.println(buffer);
+          }
+        }
+        
+        if(data_index==false)
+        {
+          if(!(strcmp(buffer, "GPRMC") == 0))
+          {
+            sentenceBegins = false;
+            //Serial.println(buffer);
+          }
+        }
+      }
     }
     
     if(c == '$') //beginning of sentence...start saving to buffer
@@ -533,7 +565,7 @@ boolean Process_message()
     date[8] = '\0';
     
     data_index = true; //We should have a valid date.  Now begin receiving GGA data
-    mySerial.println("$PMTK314,0,0,0,1,0,0,0,0,0,0,0,0,0,0*35");
+    //mySerial.println("$PMTK314,0,0,0,1,0,0,0,0,0,0,0,0,0,0*35");
     last_valid_data = millis() + 2000;
     return true;
   }
